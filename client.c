@@ -63,6 +63,7 @@ void* thread_function(void* args_ptr) {
   // open a connection to the specified host and port in the args
   int clientfd = Open_clientfd(args->host, args->port);
 
+  printf("Thread %ld connected to %s:%d\n", pthread_self(), args->host, args->port);
   clientSend(clientfd, args->filename);
   clientPrint(clientfd);
 
@@ -92,6 +93,7 @@ int main(int argc, char *argv[])
           perror("pthread_create");
           exit(1);
         }
+        printf("Thread %d created\n", i);
     }
 
     for (int i = 0; i < num_of_threads; i++) {
