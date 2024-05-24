@@ -20,9 +20,8 @@ typedef struct {
     int front;
     int rear;
     int size;
-    pthread_mutex_t mutex;
-    pthread_cond_t cond_nonempty;
-    pthread_cond_t cond_nonfull;
+    sem_t sem_empty; // Semaphore to track empty slots
+    sem_t sem_full;  // Semaphore to track full slots
 } ConnectionQueue;
 
 // global variables
@@ -31,45 +30,37 @@ int is_shutting_down = 0;
 ConnectionQueue connection_queue;
 
 
+
 void queue_init(ConnectionQueue *q) {
     q->front = 0;
     q->rear = 0;
     q->size = 0;
-    pthread_mutex_init(&q->mutex, NULL);
-    pthread_cond_init(&q->cond_nonempty, NULL);
-    pthread_cond_init(&q->cond_nonfull, NULL);
+    sem_init(&q->sem_empty, 0, MAX_QUEUE_SIZE); // Initialize to max capacity
+    sem_init(&q->sem_full, 0, 0);               // Initially, no items are full
 }
 
 void queue_destroy(ConnectionQueue *q) {
-    pthread_mutex_destroy(&q->mutex);
-    pthread_cond_destroy(&q->cond_nonempty);
-    pthread_cond_destroy(&q->cond_nonfull);
+    sem_destroy(&q->sem_empty);
+    sem_destroy(&q->sem_full);
 }
 
 void queue_push(ConnectionQueue *q, int fd) {
-    pthread_mutex_lock(&q->mutex);
-    while (q->size == MAX_QUEUE_SIZE) {
-        pthread_cond_wait(&q->cond_nonfull, &q->mutex);
-    }
+    sem_wait(&q->sem_empty); // Wait until there's an empty slot
     q->fds[q->rear] = fd;
     q->rear = (q->rear + 1) % MAX_QUEUE_SIZE;
     q->size++;
-    pthread_cond_signal(&q->cond_nonempty);
-    pthread_mutex_unlock(&q->mutex);
+    sem_post(&q->sem_full); // Increment count of full slots
 }
 
 int queue_pop(ConnectionQueue *q) {
-    pthread_mutex_lock(&q->mutex);
-    while (q->size == 0) {
-        pthread_cond_wait(&q->cond_nonempty, &q->mutex);
-    }
+    sem_wait(&q->sem_full); // Wait until there's a full slot
     int fd = q->fds[q->front];
     q->front = (q->front + 1) % MAX_QUEUE_SIZE;
     q->size--;
-    pthread_cond_signal(&q->cond_nonfull);
-    pthread_mutex_unlock(&q->mutex);
+    sem_post(&q->sem_empty); // Increment count of empty slots
     return fd;
 }
+
 
 void getargs(Args* args, int argc, char *argv[])
 {
